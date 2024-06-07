@@ -24,6 +24,8 @@ import zipfile
 
 test=wentidaima
 
+weishenm you meiyoul 
+
 FIXED_REQS = "pytest==6.2.4 allure-pytest==2.8.6"
 DYNA_REQS = "sdet_detection==0.4.9 increment==0.3.11.8 " \
             "pytest-sdet-case==0.6.10 pytest-sdet-xdist==1.5.0 pytest-sdet-sync==0.4.5"

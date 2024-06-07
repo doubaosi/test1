@@ -63,6 +63,7 @@ MONGO_CONF = {
     "password": "coverage2022",
     "table": "diff",
 }
+test = 'test'
 
 logging.config.dictConfig(LOG_CONF)
 LOGGER = logging.getLogger("both")

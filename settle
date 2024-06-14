@@ -1,0 +1,1821 @@
+package com.best.oasis.seaman.service.impl.finance;
+
+import clover.org.apache.commons.collections.CollectionUtils;
+import com.best.oasis.express.biz.vo.base.BasePage;
+import com.best.oasis.seaman.bo.bill.BillBo;
+import com.best.oasis.seaman.bo.bill.CollectionsRecordBo;
+import com.best.oasis.seaman.bo.bill.ExpenseItemBo;
+import com.best.oasis.seaman.bo.bill.ExpenseTypeBo;
+import com.best.oasis.seaman.bo.company.CompanyBo;
+import com.best.oasis.seaman.bo.company.CompanySettlementConfigBo;
+import com.best.oasis.seaman.bo.container.ContainerRegisterBo;
+import com.best.oasis.seaman.bo.finance.SettlementBo;
+import com.best.oasis.seaman.bo.jiyun.OsshipPartnerBo;
+import com.best.oasis.seaman.bo.loading.LoadingReportBo;
+import com.best.oasis.seaman.bo.loading.LoadingReportDetailBo;
+import com.best.oasis.seaman.bo.order.OrderBo;
+import com.best.oasis.seaman.bo.order.ShipmentChargeBo;
+import com.best.oasis.seaman.bo.order.ShipmentOrderPackageBo;
+import com.best.oasis.seaman.bo.platform.qywx.QywxRoomCompanyBo;
+import com.best.oasis.seaman.bo.warehouse.WarehouseBo;
+import com.best.oasis.seaman.common.enums.PriceModeEnum;
+import com.best.oasis.seaman.common.enums.base.OrderTypeEnum;
+import com.best.oasis.seaman.common.enums.bill.BillReceivedStateEnum;
+import com.best.oasis.seaman.common.enums.bill.BillStateEnum;
+import com.best.oasis.seaman.common.enums.bill.BillViewStateEnum;
+import com.best.oasis.seaman.common.enums.bill.ChargeUnitEnum;
+import com.best.oasis.seaman.common.enums.company.*;
+import com.best.oasis.seaman.common.enums.finance.*;
+import com.best.oasis.seaman.common.enums.order.*;
+import com.best.oasis.seaman.common.enums.platform.qywx.RoomTypeEnum;
+import com.best.oasis.seaman.common.enums.pricing.TieredUnitEnum;
+import com.best.oasis.seaman.common.enums.user.RoleCategoryEnum;
+import com.best.oasis.seaman.common.exception.BusinessException;
+import com.best.oasis.seaman.common.util.BeanUtilCopy;
+import com.best.oasis.seaman.common.util.DateUtil;
+import com.best.oasis.seaman.dao.company.CompanyDao;
+import com.best.oasis.seaman.dao.company.CompanySettlementConfigDao;
+import com.best.oasis.seaman.dao.container.ContainerRegisterDao;
+import com.best.oasis.seaman.dao.finance.BillDao;
+import com.best.oasis.seaman.dao.finance.CollectionsRecordDao;
+import com.best.oasis.seaman.dao.finance.ExpenseItemDao;
+import com.best.oasis.seaman.dao.finance.SettlementDao;
+import com.best.oasis.seaman.dao.loading.LoadingReportDao;
+import com.best.oasis.seaman.dao.loading.LoadingReportDetailDao;
+import com.best.oasis.seaman.dao.order.OrderDao;
+import com.best.oasis.seaman.dao.order.ShipmentChargeDao;
+import com.best.oasis.seaman.dao.order.ShipmentOrderPackageDao;
+import com.best.oasis.seaman.dao.platform.qywx.QywxRoomCompanyDao;
+import com.best.oasis.seaman.dao.user.UserDao;
+import com.best.oasis.seaman.dao.user.UserOperateLogDao;
+import com.best.oasis.seaman.helper.address.AddressHelper;
+import com.best.oasis.seaman.helper.queue.QueueHelper;
+import com.best.oasis.seaman.helper.system.LocalCacheHelper;
+import com.best.oasis.seaman.helper.utils.JsonUtils;
+import com.best.oasis.seaman.request.queue.SettlementNotifyRequest;
+import com.best.oasis.seaman.request.settlement.*;
+import com.best.oasis.seaman.response.settlement.*;
+import com.best.oasis.seaman.response.user.DataPermission;
+import com.best.oasis.seaman.response.user.UserResp;
+import com.best.oasis.seaman.service.base.OrderNumberService;
+import com.best.oasis.seaman.service.base.TransactionService;
+import com.best.oasis.seaman.service.finance.SettlementService;
+import com.best.oasis.seaman.service.impl.platform.QywxSettlementPushAfterConfirmServiceImpl;
+import com.best.oasis.seaman.service.impl.platform.QywxSettlementPushByManualServiceImpl;
+import com.best.oasis.seaman.service.user.UserService;
+import com.best.oasis.seaman.so.bill.BillSo;
+import com.best.oasis.seaman.so.bill.ExpenseItemSo;
+import com.best.oasis.seaman.so.company.CompanySettlementConfigSo;
+import com.best.oasis.seaman.so.finance.CollectionsRecordSo;
+import com.best.oasis.seaman.so.finance.SettlementSo;
+import com.best.oasis.seaman.so.loading.LoadingReportDetailSo;
+import com.best.oasis.seaman.so.loading.LoadingReportSo;
+import com.best.oasis.seaman.so.order.OrderSo;
+import com.best.oasis.seaman.so.order.ShipmentOrderPackageSo;
+import com.best.oasis.seaman.so.platform.qywx.QywxRoomCompanySo;
+import com.best.oasis.seaman.vo.bill.CollectionsRecordVo;
+import com.best.oasis.seaman.vo.bill.ExpenseItemVo;
+import com.best.oasis.seaman.vo.company.CompanyInfoVo;
+import com.best.oasis.seaman.vo.container.ShipmentContainerOrderInfoVo;
+import com.best.oasis.seaman.vo.finance.CompanySettlementVo;
+import com.best.oasis.seaman.vo.finance.SettlementCollectionTimeVo;
+import com.best.oasis.seaman.vo.finance.SettlementVo;
+import com.best.oasis.seaman.vo.order.OrderMainMarkHeaderVo;
+import com.best.oasis.seaman.vo.order.ShipmentOrderBaseInfoVo;
+import com.best.oasis.seaman.vo.user.ManageUserInfo;
+import com.best.transport.base.PageList;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import javax.annotation.Resource;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+@Slf4j
+public class SettlementServiceImpl extends TransactionService implements SettlementService {
+    @Value("${settlement.beginDate}")
+    private String settlementBeginDate;
+
+    @Autowired
+    private SettlementDao settlementDao;
+    @Autowired
+    private BillDao billDao;
+    @Autowired
+    private CollectionsRecordDao collectionsRecordDao;
+    @Autowired
+    private ShipmentOrderPackageDao shipmentOrderPackageDao;
+    @Autowired
+    private CompanyDao companyDao;
+    @Autowired
+    private ShipmentChargeDao shipmentChargeDao;
+    @Autowired
+    private LocalCacheHelper localCacheHelper;
+    @Autowired
+    private OrderNumberService orderNumberService;
+    @Autowired
+    private UserDao userDao;
+    @Autowired
+    private ExpenseItemDao expenseItemDao;
+    @Autowired
+    private ContainerRegisterDao containerRegisterDao;
+    @Autowired
+    private QueueHelper queueHelper;
+    @Resource
+    private QywxSettlementPushByManualServiceImpl qywxSettlementPushByManualService;
+    @Resource
+    private QywxSettlementPushAfterConfirmServiceImpl qywxSettlementPushAfterConfirmService;
+
+    @Autowired
+    private QywxRoomCompanyDao qywxRoomCompanyDao;
+    @Autowired
+    private CompanySettlementConfigDao companySettlementConfigDao;
+    @Autowired
+    private OrderDao orderDao;
+    @Autowired
+    private UserService userService;
+    @Autowired
+    private LoadingReportDao loadingReportDao;
+    @Autowired
+    private LoadingReportDetailDao loadingReportDetailDao;
+    @Autowired
+    UserOperateLogDao userOperateLogDao;
+
+    @Override
+    public BasePage<ListResponse> getList(SettlementListRequest req) {
+        SettlementSo so = new SettlementSo();
+
+        so.setCompanyId(req.getCompanyId());
+        so.setLikeNo(req.getNo());
+        so.setConfirmState(req.getConfirmState());
+        so.setPayState(req.getPayState());
+        if (req.getNotifiedState() != null) {
+            if (req.getNotifiedState().equals(SettlementNotifiedStateEnum.NOT_NEED_NOTIFY.getCode())) {
+                so.setNotifiedState(SettlementNotifiedStateEnum.NONE.getCode());
+                so.setNotNeedNotify(true);
+            } else if (req.getNotifiedState().equals(SettlementNotifiedStateEnum.NONE.getCode())) {
+                so.setNotifiedState(SettlementNotifiedStateEnum.NONE.getCode());
+                so.setNotNeedNotify(false);
+            } else {
+                so.setNotifiedState(req.getNotifiedState());
+            }
+        }
+        so.setSalesId(req.getSalesId());
+        so.setGePostingTime(req.getPostingTimeFrom());
+        so.setLtPostingTime(req.getPostingTimeTo());
+        so.setReceivedAtFrom(req.getReceivedAtFrom());
+        so.setReceivedAtTo(req.getReceivedAtTo());
+
+        // 获取当前用户及用户角色
+        DataPermission dataPermission = userService.getDataPermission();
+        so.setDataPermission(dataPermission);
+
+        so.setPageNumber(req.getCurrentPage());
+        so.setPageSize(req.getPageSize());
+        PageList<SettlementVo> pageList = settlementDao.listPaginationVoBySo(so);
+        List<ListResponse> list = BeanUtilCopy.copyListProperties(pageList.getList(), ListResponse::new);
+        fill(list);
+        BasePage<ListResponse> response = new BasePage<>();
+        response.setCurrentPage(req.getCurrentPage());
+        response.setTotal(pageList.getCount());
+        response.setPageSize(req.getPageSize());
+        response.setList(list);
+        return response;
+    }
+
+    private void fill(List<ListResponse> list) {
+        if (list.isEmpty()) {
+            return;
+        }
+
+        List<String> companyIds = list.stream()
+                .map(ListResponse::getCompanyId)
+                .distinct().collect(Collectors.toList());
+        Map<String, CompanyBo> companyBoMap = companyDao.getByIds(companyIds)
+                .stream().collect(Collectors.toMap(CompanyBo::getId, d -> d));
+
+        QywxRoomCompanySo qywxRoomCompanySo = new QywxRoomCompanySo();
+        qywxRoomCompanySo.setCompanyIds(companyIds);
+        qywxRoomCompanySo.setRoomType(RoomTypeEnum.BILL_ROOM.getCode());
+        List<QywxRoomCompanyBo> qywxRoomCompanyBos = qywxRoomCompanyDao.listBoBySo(qywxRoomCompanySo);
+
+        List<Long> salesIds = companyBoMap.values().stream()
+                .map(CompanyBo::getSalesUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, ManageUserInfo> userInfoMap = userDao.getManageUserInfoByIds(salesIds)
+                .stream().collect(Collectors.toMap(ManageUserInfo::getId, Function.identity()));
+
+        List<Long> settlementIds = list.stream()
+                .map(ListResponse::getId)
+                .collect(Collectors.toList());
+        Map<Long, SettlementCollectionTimeVo> collectionTimeVoMap = collectionsRecordDao.getSettlementCollectionTimes(settlementIds)
+                .stream().collect(Collectors.toMap(SettlementCollectionTimeVo::getSettlementId, Function.identity()));
+
+        for (ListResponse resp : list) {
+            if (companyBoMap.containsKey(resp.getCompanyId())) {
+                CompanyBo companyBo = companyBoMap.get(resp.getCompanyId());
+                resp.setCompanyName(companyBo.getName());
+                resp.setSalesId(companyBo.getSalesUserId());
+                if (!companyBo.getSettlementNotify()) {
+                    if (resp.getNotifiedState().equals(SettlementNotifiedStateEnum.NONE.getCode())) {
+                        resp.setNotifiedState(SettlementNotifiedStateEnum.NOT_NEED_NOTIFY.getCode());
+                    }
+                }
+            }
+
+            if (qywxRoomCompanyBos.stream().noneMatch(d -> d.getCompanyId().equals(resp.getCompanyId()))) {
+                if (resp.getNotifiedState().equals(SettlementNotifiedStateEnum.NONE.getCode())) {
+                    resp.setNotifiedState(SettlementNotifiedStateEnum.NOT_NEED_NOTIFY.getCode());
+                }
+            }
+
+            if (resp.getSalesId() != null) {
+                if (userInfoMap.containsKey(resp.getSalesId())) {
+                    resp.setSales(userInfoMap.get(resp.getSalesId()).getName());
+                }
+            }
+
+            if (collectionTimeVoMap.containsKey(resp.getId())) {
+                SettlementCollectionTimeVo collectionTimeVo = collectionTimeVoMap.get(resp.getId());
+                resp.setMinReceivedAt(collectionTimeVo.getMinReceivedAt());
+                resp.setMaxReceivedAt(collectionTimeVo.getMaxReceivedAt());
+            }
+        }
+    }
+
+    @Override
+    public DetailResponse getDetail(SettlementInfoRequest req) {
+        SettlementBo bo = settlementDao.findBo(req.getId());
+        if (bo == null) {
+            throw new BusinessException("账单不存在！");
+        }
+        DetailResponse response = new DetailResponse();
+        BeanUtils.copyProperties(bo, response);
+        fill(Arrays.asList(response));
+        return response;
+    }
+
+    @Override
+    public List<BillResponse> getBillList(SettlementInfoRequest req) {
+        BillSo so = new BillSo();
+        so.setSettlementId(req.getId());
+        List<BillBo> list = billDao.getListBySo(so);
+        if (list.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> billIds = list.stream()
+                .map(BillBo::getId)
+                .distinct().collect(Collectors.toList());
+        List<ExpenseItemVo> expenseItemVoList = expenseItemDao.getByBillIds(billIds);
+        CollectionsRecordSo collectionsRecordSo = new CollectionsRecordSo();
+        collectionsRecordSo.setBillIds(billIds);
+        List<CollectionsRecordBo> collectionsRecordBoList = collectionsRecordDao.getListBySo(collectionsRecordSo);
+        List<String> userCodes = collectionsRecordBoList.stream()
+                .map(CollectionsRecordBo::getCreatedBy)
+                .filter(d -> StringUtils.hasText(d))
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, ManageUserInfo> userInfoCodeMap = userDao.getManageUserInfoByCodes(userCodes)
+                .stream()
+                .collect(Collectors.toMap(ManageUserInfo::getCode, Function.identity()));
+        for (CollectionsRecordBo recordBo : collectionsRecordBoList) {
+            String createBy = recordBo.getCreatedBy();
+            if (StringUtils.hasText(createBy) && userInfoCodeMap.containsKey(createBy)) {
+                recordBo.setCreatedBy(userInfoCodeMap.get(createBy).getName());
+            }
+        }
+
+        List<String> shipmentOrderIds = list.stream()
+                .map(BillBo::getShipmentOrderId)
+                .distinct().collect(Collectors.toList());
+        List<OrderBo> orderBos = orderDao.getByShipmentOrderIds(shipmentOrderIds);
+        List<ShipmentChargeBo> chargeBos = shipmentChargeDao.getByShipmentOrderIds(shipmentOrderIds);
+        List<ShipmentContainerOrderInfoVo> containerOrderInfoVoList = containerRegisterDao.getByShipmentOrderIds(shipmentOrderIds);
+
+        List<OrderMainMarkHeaderVo> mainMarkHeaderVoList= shipmentOrderPackageDao.getOrderMarkHeaderVos(shipmentOrderIds);
+
+        List<BillResponse> responses = new ArrayList<>();
+        for (BillBo bo : list) {
+            BillResponse response = new BillResponse();
+            BeanUtils.copyProperties(bo, response);
+            BillViewStateEnum viewState = bo.getViewState();
+            response.setState(viewState == null ? null : viewState.getCode());
+            response.setUnPaidAmount(response.getAmount().subtract(response.getReceivedAmount()));
+            response.setExpenseItems(expenseItemVoList.stream()
+                    .filter(d -> d.getBillId().equals(bo.getId()))
+                    .collect(Collectors.toList()));
+
+            List<CollectionsRecordBo> collectionsRecordBos = collectionsRecordBoList.stream()
+                    .filter(d -> d.getBillId().equals(bo.getId()))
+                    .collect(Collectors.toList());
+            response.setCollectionsRecords(BeanUtilCopy.copyListProperties(collectionsRecordBos, CollectionsRecordVo::new));
+
+            Optional<OrderBo> optionalShipmentOrderBo = orderBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(response.getShipmentOrderId()))
+                    .findFirst();
+            if (optionalShipmentOrderBo.isPresent()) {
+                OrderBo orderBo = optionalShipmentOrderBo.get();
+                response.setShipmentOrderId(orderBo.getShipmentOrderId());
+                response.setShipmentOrderNo(orderBo.getExternalOrderNo());
+                response.setSubmittedAt(orderBo.getSubmittedAt());
+                response.setReceivedAt(orderBo.getInStoreTime());
+                response.setWarehouse(orderBo.getWarehouseCode());
+                WarehouseBo warehouseBo = localCacheHelper.getWarehouseByCode(orderBo.getWarehouseCode());
+                if (warehouseBo != null) {
+                    response.setWarehouseName(warehouseBo.getName());
+                }
+                response.setTransportCode(orderBo.getOrgId());
+                OsshipPartnerBo osshipPartnerBo = localCacheHelper.getOsshipPartnerBoByOrgId(orderBo.getOrgId());
+                if (osshipPartnerBo != null) {
+                    response.setTransportName(osshipPartnerBo.getOrgname());
+                }
+                response.setExpressNumber(orderBo.getBoxMark());
+                response.setMarkHeaderFull(orderBo.getParentTag());
+                response.setWeight(orderBo.getTotalWeight());
+                response.setVolume(orderBo.getTotalVolume());
+                response.setPackageCount(orderBo.getTotalBoxes());
+
+                List<String> markHeaders = mainMarkHeaderVoList.stream()
+                        .filter(d->d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                        .map(OrderMainMarkHeaderVo::getMainMarkHeader)
+                        .filter(d->StringUtils.hasText(d))
+                        .collect(Collectors.toList());
+                response.setMarkHeaderFull(String.join(",",markHeaders));
+
+                AddressHelper.copyReceiver(orderBo, response);
+
+                List<ShipmentContainerOrderInfoVo> containerOrderInfoVos = containerOrderInfoVoList.stream()
+                        .filter(d -> d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                        .collect(Collectors.toList());
+                response.setContainerOrders(BeanUtilCopy.copyListProperties(containerOrderInfoVos, ContainerOrderInfo::new));
+            }
+
+            Optional<ShipmentChargeBo> optionalShipmentChargeBo = chargeBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(response.getShipmentOrderId()))
+                    .findFirst();
+            if (optionalShipmentChargeBo.isPresent()) {
+                ShipmentChargeBo chargeBo = optionalShipmentChargeBo.get();
+                response.setChargeableWeight(chargeBo.getChargeableWeight());
+                response.setChargeableWeightUnit(chargeBo.getChargeableWeightUnit());
+                response.setChargeablePrice(chargeBo.getPricePerUnit());
+                if (chargeBo.getChargeableWeightUnit().equals(ChargeUnitEnum.CBM.getCode())) {
+                    response.setPriceMode(PriceModeEnum.VOLUME.getCode());
+                } else if (chargeBo.getChargeableWeightUnit().equals(ChargeUnitEnum.KG.getCode())) {
+                    response.setPriceMode(PriceModeEnum.WEIGHT.getCode());
+                }
+                response.setTieredUnit(chargeBo.getTieredUnit());
+
+                if (response.getTieredUnit() != null && response.getTieredUnit().equals(TieredUnitEnum.SINGLE.getCode())) {
+                    response.setChargeablePrice(chargeBo.getShippingPrice());
+                } else {
+                    response.setChargeablePrice(chargeBo.getPricePerUnit());
+                }
+            }
+
+            responses.add(response);
+        }
+
+        companyDao.fillCompanyInfo(responses, BillResponse::getCompanyId, (resp, info) -> {
+            resp.setCompanyName(info.getName());
+            resp.setCompanyMarkHeader(info.getMarkHeader());
+        });
+
+        responses = responses.stream()
+                .sorted(Comparator.comparing(BillResponse::getNo, Comparator.reverseOrder()))
+                .collect(Collectors.toList());
+
+        return responses;
+    }
+
+    @Override
+    public List<CollectionRecordResponse> getCollectionList(SettlementInfoRequest req) {
+        BillSo billSo = new BillSo();
+        billSo.setSettlementId(req.getId());
+        List<BillBo> billBoList = billDao.getListBySo(billSo);
+        if (billBoList.isEmpty()) {
+            return new ArrayList<>();
+        }
+        CollectionsRecordSo so = new CollectionsRecordSo();
+        so.setBillIds(billBoList.stream().map(BillBo::getId).collect(Collectors.toList()));
+        List<CollectionsRecordBo> list = collectionsRecordDao.getListBySo(so);
+
+        List<String> userCodes = list.stream()
+                .map(CollectionsRecordBo::getCreatedBy)
+                .filter(d -> StringUtils.hasText(d))
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, ManageUserInfo> userInfoCodeMap = userDao.getManageUserInfoByCodes(userCodes)
+                .stream()
+                .collect(Collectors.toMap(ManageUserInfo::getCode, Function.identity()));
+
+        List<CollectionRecordResponse> responses = new ArrayList<>();
+        for (CollectionsRecordBo bo : list) {
+            CollectionRecordResponse response = new CollectionRecordResponse();
+            BeanUtils.copyProperties(bo, response);
+
+            Optional<BillBo> optional = billBoList.stream()
+                    .filter(d -> d.getId().equals(response.getBillId()))
+                    .findFirst();
+            if (optional.isPresent()) {
+                BillBo billBo = optional.get();
+                response.setBillNo(billBo.getNo());
+                response.setShipmentOrderId(billBo.getShipmentOrderId());
+            }
+
+            String createBy = response.getCreatedBy();
+            if (StringUtils.hasText(createBy) && userInfoCodeMap.containsKey(createBy)) {
+                response.setCreatedBy(userInfoCodeMap.get(createBy).getName());
+            }
+            responses.add(response);
+        }
+
+        List<String> shipmentOrderIds = responses.stream()
+                .map(CollectionRecordResponse::getShipmentOrderId)
+                .filter(d -> StringUtils.hasText(d))
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, String> shipmentOrderNoMaps = orderDao.getBaseInfos(shipmentOrderIds)
+                .stream()
+                .collect(Collectors.toMap(ShipmentOrderBaseInfoVo::getId, ShipmentOrderBaseInfoVo::getNo));
+        for (CollectionRecordResponse resp : responses) {
+            if (StringUtils.hasText(resp.getShipmentOrderId()) &&
+                    shipmentOrderNoMaps.containsKey(resp.getShipmentOrderId())
+            ) {
+                resp.setShipmentOrderNo(shipmentOrderNoMaps.get(resp.getShipmentOrderId()));
+
+            }
+        }
+
+        responses = responses.stream()
+                .sorted(Comparator.comparing(CollectionRecordResponse::getShipmentOrderNo, Comparator.reverseOrder()))
+                .collect(Collectors.toList());
+        return responses;
+    }
+
+    @Override
+    public List<BillSettlementStateResponse> queryBillSettlementState(BillSettlementStateRequest req) {
+        List<BillBo> billBoList = billDao.getByIds(req.getBillIds());
+
+        List<String> errorNos = new ArrayList<>();
+        for (BillBo billBo : billBoList) {
+            if (billBo.getSettlementId() != null) {
+                errorNos.add(billBo.getNo());
+            }
+        }
+        if (!errorNos.isEmpty()) {
+            throw new BusinessException("费用单号：" + String.join(",", errorNos) + "已出账！");
+        }
+
+        List<String> shipmentOrderIds = billBoList.stream()
+                .map(BillBo::getShipmentOrderId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderIds(shipmentOrderIds);
+        List<BillBo> shipmentOrderBillList = billDao.getListBySo(billSo);
+
+        List<Long> settlementIds = shipmentOrderBillList.stream()
+                .map(BillBo::getSettlementId)
+                .distinct().collect(Collectors.toList());
+        List<SettlementBo> settlementBoList = settlementDao.listBoByIdList(settlementIds);
+
+        Map<String, List<BillBo>> billBoMap = billBoList.stream()
+                .collect(Collectors.groupingBy(BillBo::getShipmentOrderId));
+
+        List<BillSettlementStateResponse> responses = new ArrayList<>();
+        for (String shipmentOrderId : billBoMap.keySet()) {
+            List<BillBo> billBos = billBoMap.get(shipmentOrderId);
+            BillSettlementStateResponse response = new BillSettlementStateResponse();
+            response.setBillIds(billBos.stream().map(BillBo::getId).collect(Collectors.toList()));
+            response.setShipmentOrderId(shipmentOrderId);
+
+            List<Long> billSettlementIds =
+                    shipmentOrderBillList.stream()
+                            .filter(d -> d.getShipmentOrderId().equals(shipmentOrderId))
+                            .filter(d -> d.getSettlementId() != null)
+                            .map(BillBo::getSettlementId)
+                            .collect(Collectors.toList());
+            Optional<SettlementBo> optional = settlementBoList.stream()
+                    .filter(d -> billSettlementIds.contains(d.getId())).max((o1, o2) -> {
+                        ////按照状态未确认>已确认>部分到账>全部到账排序
+                        ////如果状态相同，按照出账时间倒序
+                        if (o1.getOrder() == o2.getOrder()) {
+                            return o1.getPostingTime().compareTo(o2.getPostingTime());
+                        } else {
+                            return Integer.compare(o1.getOrder(), o2.getOrder());
+                        }
+                    });
+            if (optional.isPresent()) {
+                SettlementBo settlementBo = optional.get();
+                response.setSettlementId(settlementBo.getId());
+                response.setSettlementNo(settlementBo.getNo());
+                response.setSettlementPayState(settlementBo.getPayState());
+                response.setSettlementConfirmState(settlementBo.getConfirmState());
+            }
+            responses.add(response);
+        }
+
+        Map<String, String> shipmentOrderNoMaps = orderDao.getBaseInfos(shipmentOrderIds)
+                .stream()
+                .collect(Collectors.toMap(ShipmentOrderBaseInfoVo::getId, ShipmentOrderBaseInfoVo::getNo));
+        for (BillSettlementStateResponse resp : responses) {
+            if (StringUtils.hasText(resp.getShipmentOrderId()) &&
+                    shipmentOrderNoMaps.containsKey(resp.getShipmentOrderId())
+            ) {
+                resp.setShipmentOrderNo(shipmentOrderNoMaps.get(resp.getShipmentOrderId()));
+
+            }
+        }
+
+        responses = responses.stream()
+                .sorted(Comparator.comparing(BillSettlementStateResponse::getSettlementConfirmState, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(BillSettlementStateResponse::getSettlementPayState, Comparator.nullsLast(Comparator.naturalOrder())))
+                .collect(Collectors.toList());
+        return responses;
+    }
+
+    @Override
+    public void submit(SettlementSubmitRequest req) {
+        List<String> billIds = req.getItems().stream()
+                .map(SettlementSubmitItem::getBillId)
+                .collect(Collectors.toList());
+        List<BillBo> billBoList = billDao.getByIds(billIds);
+
+        List<String> errorNos = new ArrayList<>();
+        for (BillBo billBo : billBoList) {
+            if (billBo.getSettlementId() != null) {
+                errorNos.add(billBo.getNo());
+            }
+        }
+        if (!errorNos.isEmpty()) {
+            throw new BusinessException("费用单号：" + String.join(",", errorNos) + "已出账！");
+        }
+
+        Date now = new Date();
+
+        List<String> newBillIds = req.getItems().stream()
+                .filter(d -> SettlementSubmitActionEnum.NEW.getCode() == d.getAction())
+                .map(SettlementSubmitItem::getBillId)
+                .collect(Collectors.toList());
+        List<BillBo> createList = billBoList.stream()
+                .filter(d -> newBillIds.contains(d.getId()))
+                .collect(Collectors.toList());
+
+
+        List<String> shipmentOrderIds = createList.stream()
+                .map(BillBo::getShipmentOrderId)
+                .distinct().collect(Collectors.toList());
+        Map<String, OrderBo> flcShipmentOrderBoList = orderDao.getByShipmentOrderIds(shipmentOrderIds)
+                .stream()
+                .filter(d -> d.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode()))
+                .collect(Collectors.toMap(OrderBo::getShipmentOrderId, Function.identity()));
+
+        List<BillBo> createLclList = new ArrayList<>();
+        List<BillBo> createFclList = new ArrayList<>();
+        for (BillBo billBo : createList) {
+            if (flcShipmentOrderBoList.containsKey(billBo.getShipmentOrderId())) {
+                createFclList.add(billBo);
+            } else {
+                createLclList.add(billBo);
+            }
+        }
+
+        if (!createLclList.isEmpty()) {
+            create(createLclList, SettlementModeEnum.MANUAL, SettlementTypeEnum.NONE, now, null, "", "");
+        }
+        if (!createFclList.isEmpty()) {
+            create(createFclList, SettlementModeEnum.MANUAL, SettlementTypeEnum.FCL, now, null, "", "");
+        }
+
+        List<Long> settlementIds = req.getItems().stream()
+                .filter(d -> SettlementSubmitActionEnum.UPDATE.getCode() == d.getAction())
+                .map(SettlementSubmitItem::getSettlementId)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, SettlementBo> settlementBoMap = settlementDao.listBoByIdList(settlementIds)
+                .stream()
+                .collect(Collectors.toMap(SettlementBo::getId, Function.identity()));
+
+        for (Long settlementId : settlementIds) {
+            SettlementBo settlementBo = settlementBoMap.get(settlementId);
+
+            List<String> settlementBillIds = req.getItems().stream()
+                    .filter(d -> SettlementSubmitActionEnum.UPDATE.getCode() == d.getAction())
+                    .filter(d -> settlementId.equals(d.getSettlementId()))
+                    .map(SettlementSubmitItem::getBillId)
+                    .collect(Collectors.toList());
+
+            List<BillBo> billBos = billBoList.stream()
+                    .filter(d -> settlementBillIds.contains(d.getId()))
+                    .collect(Collectors.toList());
+
+            update(billBos, settlementBo, now, null);
+        }
+    }
+
+    private void create(List<BillBo> billBoList, SettlementModeEnum mode, SettlementTypeEnum type, Date now, Date deadline,String shipmentOrderId, String registerNo) {
+        Map<String, List<BillBo>> map = billBoList.stream()
+                .collect(Collectors.groupingBy(BillBo::getCompanyId));
+        Map<String, CompanyInfoVo> companyBoMap = companyDao.getCompanyInfos(new ArrayList<>(map.keySet())).stream()
+                .collect(Collectors.toMap(CompanyInfoVo::getId, Function.identity()));
+
+        List<String> nos = orderNumberService.create(OrderTypeEnum.Settlement, map.size());
+        int i = 0;
+        for (String companyId : map.keySet()) {
+            List<BillBo> billBos = map.get(companyId);
+
+            if (!companyBoMap.containsKey(companyId)) {
+                throw new BusinessException("公司id" + companyId + "不存在！");
+            }
+            CompanyInfoVo companyInfoVo = companyBoMap.get(companyId);
+
+            SettlementBo bo = new SettlementBo();
+            bo.setNo("ARBL" + companyInfoVo.getMarkHeader() + nos.get(i));
+            i++;
+
+            bo.setCompanyId(companyId);
+            bo.setPostingTime(now);
+            bo.setMode(mode.getCode());
+            bo.setSettlementType(type.getCode());
+            bo.setAmount(billBos.stream().map(BillBo::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add));
+            bo.setReceivedAmount(billBos.stream().map(BillBo::getReceivedAmount).reduce(BigDecimal.ZERO, BigDecimal::add));
+            bo.setConfirmState(SettlementConfirmStateEnum.NONE.getCode());
+            bo.setPayStateByBills(billBos, new Date());
+            bo.setNotifiedState(SettlementNotifiedStateEnum.NONE.getCode());
+            bo.setDownloadKey(UUID.randomUUID().toString());
+            bo.setRegisterNo(registerNo);
+            if (deadline != null) {
+                bo.setDeadline(deadline);
+            }
+            if (mode.getCode().equals(SettlementModeEnum.ORDER.getCode())) {
+                bo.setShipmentOrderId(shipmentOrderId);
+            }
+            settlementDao.insert(bo);
+
+            billBos.forEach(d -> {
+                d.setSettlementId(bo.getId());
+                billDao.update(d);
+            });
+
+            if (!bo.getPayState().equals(SettlementPayStateEnum.PAID.getCode())) {
+                SettlementNotifyRequest notifyRequest = new SettlementNotifyRequest();
+                notifyRequest.setId(bo.getId());
+                notifyRequest.setNotifyType(SettlementNotifyTypeEnum.CREATE.getCode());
+                queueHelper.publish(notifyRequest);
+            }
+        }
+    }
+
+    private void update(List<BillBo> billBoList, SettlementBo bo, Date now, Date deadline) {
+        for (BillBo billBo : billBoList) {
+            bo.setAmount(bo.getAmount().add(billBo.getAmount()));
+            bo.setReceivedAmount(bo.getReceivedAmount().add(billBo.getReceivedAmount()));
+            billBo.setSettlementId(bo.getId());
+            billDao.update(billBo);
+        }
+
+        if (bo.getReceivedAmount().compareTo(bo.getAmount()) == 0) {
+            bo.setPayState(SettlementPayStateEnum.PAID.getCode());
+            if (bo.getConfirmState().equals(SettlementConfirmStateEnum.NONE.getCode())) {
+                bo.setConfirmState(SettlementConfirmStateEnum.AUTO_CONFIRMED.getCode());
+                bo.setConfirmAt(now);
+            }
+        } else {
+            if (bo.getPayState().equals(SettlementPayStateEnum.UNCONFIRMED.getCode()) ||
+                    billBoList.stream().anyMatch(d -> d.getReceivedState()
+                            .equals(BillReceivedStateEnum.RECEIVED_STATE_UN_PAY.getCode()))) {
+                bo.setPayState(SettlementPayStateEnum.UNCONFIRMED.getCode());
+            } else {
+                if (bo.getReceivedAmount().compareTo(BigDecimal.ZERO) == 0) {
+                    bo.setPayState(SettlementPayStateEnum.READY.getCode());
+                } else {
+                    bo.setPayState(SettlementPayStateEnum.PARTIAL.getCode());
+                }
+            }
+        }
+
+        if (!billBoList.isEmpty()) {
+            bo.setModifiedTime(now);
+        }
+
+        if (bo.getDeadline() == null && deadline != null) {
+            SettlementNotifyRequest notifyRequest = new SettlementNotifyRequest();
+            notifyRequest.setId(bo.getId());
+            notifyRequest.setNotifyType(SettlementNotifyTypeEnum.UNPAYNOTIFY.getCode());
+            queueHelper.publish(notifyRequest);
+        }
+
+        bo.setDeadline(deadline);
+        settlementDao.updateAll(bo);
+
+        if (!billBoList.isEmpty()) {
+            if (!bo.getPayState().equals(SettlementPayStateEnum.PAID.getCode())) {
+                SettlementNotifyRequest notifyRequest = new SettlementNotifyRequest();
+                notifyRequest.setId(bo.getId());
+                notifyRequest.setNotifyType(SettlementNotifyTypeEnum.UPDATE.getCode());
+                queueHelper.publish(notifyRequest);
+            }
+        }
+    }
+
+    /**
+     * 查询超期未支付账单
+     *
+     * @param companyId
+     * @return
+     */
+    @Override
+    public List<SettlementBo> getOverDueSettlementList(String companyId) {
+        List<SettlementBo> settlementBoList = settlementDao.getOverDueSettlementList(companyId);
+        return settlementBoList;
+    }
+
+    /**
+     * 运单取消发货修改账单
+     *
+     * @param shipmentOrderId
+     */
+    @Override
+    public void orderCancelShip(String shipmentOrderId) {
+        Date now = new Date();
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderId(shipmentOrderId);
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        List<Long> settlementIds = billBos.stream()
+                .filter(d -> d.getSettlementId() != null)
+                .map(BillBo::getSettlementId)
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(settlementIds)) {
+            ////未出账
+            return;
+        }
+
+        List<SettlementBo> settlementBoList = settlementDao.listBoByIdList(settlementIds);
+        for (BillBo billBo : billBos) {
+            if (billBo.getSettlementId() == null) {
+                continue;
+            }
+            Optional<SettlementBo> optional = settlementBoList.stream()
+                    .filter(d -> d.getId().equals(billBo.getSettlementId()))
+                    .findFirst();
+            if (optional.isPresent()) {
+                SettlementBo settlementBo = optional.get();
+                if (settlementBo.getMode().equals(SettlementModeEnum.MANUAL.getCode())) {
+                    continue;
+                }
+
+                billBo.setSettlementId(null);
+                billBo.setSettlementIdNull(true);
+                billDao.update(billBo);
+
+                settlementBo.setAmount(settlementBo.getAmount().subtract(billBo.getAmount()));
+                settlementBo.setReceivedAmount(settlementBo.getReceivedAmount().subtract(billBo.getReceivedAmount()));
+            }
+        }
+
+        for (SettlementBo settlementBo : settlementBoList) {
+            if (settlementBo.getMode().equals(SettlementModeEnum.ORDER.getCode())) {
+                ////票账单删除账单
+                settlementDao.delete(settlementBo.getId());
+            } else if (settlementBo.getMode().equals(SettlementModeEnum.MONTH.getCode())) {
+                ////月结账单删除费用
+                BillSo so = new BillSo();
+                so.setSettlementId(settlementBo.getId());
+                List<BillBo> settlementBills = billDao.getListBySo(so);
+                settlementBo.setPayStateByBills(settlementBills, now);
+                settlementDao.update(settlementBo);
+            }
+        }
+    }
+
+
+    /**
+     * 运单取消删除账单
+     */
+    @Override
+    public void orderCancel(OrderBo orderBo) {
+        if(!orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+            ////当前只删整柜
+            return;
+        }
+
+        Date now = new Date();
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderId(orderBo.getShipmentOrderId());
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+
+        ////校验
+        for (BillBo billBo : billBos) {
+            if (!billBo.getState().equals(BillStateEnum.STATE_UN_PAY.getCode()) ||
+                    (billBo.getReceivedState().equals(BillReceivedStateEnum.RECEIVED_STATE_UN_PAY.getCode())
+                            || billBo.getReceivedState().equals(BillReceivedStateEnum.RECEIVED_STATE_PAY_ALL.getCode()))) {
+                throw new BusinessException("运单费用" + billBo.getViewState().getName() + "，不能取消");
+            }
+            if (billBo.getReceivedAmount().compareTo(BigDecimal.ZERO) != 0) {
+                throw new BusinessException("运单费用已收金额不为0，不能取消");
+            }
+        }
+
+        ////删除
+        List<Long> settlementIds = billBos.stream()
+                .filter(d -> d.getSettlementId() != null)
+                .map(BillBo::getSettlementId)
+                .collect(Collectors.toList());
+        List<SettlementBo> settlementBoList = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(settlementIds)) {
+            settlementBoList = settlementDao.listBoByIdList(settlementIds);
+        }
+
+        List<String> billIds = billBos.stream()
+                .map(d -> d.getId())
+                .collect(Collectors.toList());
+        ExpenseItemSo expenseItemSo = new ExpenseItemSo();
+        expenseItemSo.setBillIds(billIds);
+        List<ExpenseItemBo> expenseItemBos = expenseItemDao.getListBySo(expenseItemSo);
+
+        for (ExpenseItemBo expenseItemBo : expenseItemBos) {
+            expenseItemDao.delete(expenseItemBo);
+        }
+
+        for (BillBo billBo : billBos) {
+            billDao.delete(billBo);
+            userOperateLogDao.log(billBo.getNo(), "费用删除", "运单取消删除费用：" + JsonUtils.toJson(billBo));
+        }
+
+        for (SettlementBo settlementBo : settlementBoList) {
+            BillSo so = new BillSo();
+            so.setSettlementId(settlementBo.getId());
+            List<BillBo> settlementBills = billDao.getListBySo(so);
+            if (settlementBills.isEmpty()) {
+                settlementDao.delete(settlementBo.getId());
+                userOperateLogDao.log(settlementBo.getNo(), "账单删除", "运单取消删除账单：" + JsonUtils.toJson(settlementBo));
+            } else {
+                userOperateLogDao.log(settlementBo.getNo(), "账单更新", "运单取消更新账单：" + JsonUtils.toJson(settlementBo));
+
+                BigDecimal amount = settlementBills.stream()
+                        .map(BillBo::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                settlementBo.setAmount(amount);
+                BigDecimal receivedAmount = settlementBills.stream()
+                        .map(BillBo::getReceivedAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                settlementBo.setReceivedAmount(receivedAmount);
+                settlementBo.setPayStateByBills(settlementBills, now);
+                settlementDao.update(settlementBo);
+            }
+        }
+
+        orderBo.setFreight(BigDecimal.ZERO);
+        orderBo.setShippingPrice(BigDecimal.ZERO);
+        orderBo.setAmount(BigDecimal.ZERO);
+        orderDao.update(orderBo);
+    }
+
+    @Override
+    public void delete(SettlementInfoRequest req) {
+        SettlementBo bo = settlementDao.findBo(req.getId());
+        if (bo == null) {
+            throw new BusinessException("账单不存在！");
+        }
+
+        if (!bo.getConfirmState().equals(SettlementConfirmStateEnum.NONE.getCode())) {
+            throw new BusinessException("只有待确认的账单才能删除！");
+        }
+
+        BillSo billSo = new BillSo();
+        billSo.setSettlementId(bo.getId());
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        settlementDao.delete(bo.getId());
+        billBos.forEach(d -> {
+            d.setSettlementId(null);
+            d.setSettlementIdNull(true);
+            billDao.update(d);
+        });
+    }
+
+    @Override
+    public void unConfirm(SettlementInfoRequest req) {
+        SettlementBo bo = settlementDao.findBo(req.getId());
+        if (bo == null) {
+            throw new BusinessException("账单不存在！");
+        }
+
+        if (!bo.getConfirmState().equals(SettlementConfirmStateEnum.CONFIRMED.getCode()) &&
+                !bo.getConfirmState().equals(SettlementConfirmStateEnum.AUTO_CONFIRMED.getCode())
+        ) {
+            throw new BusinessException("账单不是已确认状态，不能退回待确认！");
+        }
+
+        bo.setConfirmState(SettlementConfirmStateEnum.NONE.getCode());
+        bo.setConfirmAt(null);
+        bo.setConfirmUser(null);
+        settlementDao.updateAll(bo);
+    }
+
+    @Override
+    public void notify(SettlementInfoRequest req) {
+        SettlementBo bo = settlementDao.findBo(req.getId());
+        if (bo == null) {
+            throw new BusinessException("账单不存在！");
+        }
+        if (bo.getConfirmState().equals(SettlementConfirmStateEnum.NONE.getCode())) {
+            if (qywxSettlementPushByManualService.sendMessage(bo.getId())) {
+                this.updateNotifiedMsg(bo.getId(), SettlementNotifiedStateEnum.NOTIFIED.getCode(), " ");
+            }
+        } else {
+            if (qywxSettlementPushAfterConfirmService.sendMessage(bo.getId())) {
+                this.updateNotifiedMsg(bo.getId(), SettlementNotifiedStateEnum.NOTIFIED.getCode(), " ");
+            }
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Override
+    public void updateNotifiedMsg(long settlementId, int notifiedState, String msg) {
+        SettlementBo bo = settlementDao.findBo(settlementId);
+        if (bo == null) {
+            throw new BusinessException("账单不存在！");
+        }
+
+        SettlementBo updateBo = new SettlementBo();
+        updateBo.setId(bo.getId());
+        updateBo.setLockVersion(bo.getLockVersion());
+        updateBo.setNotifiedState(notifiedState);
+        updateBo.setNotifiedMsg(msg);
+        updateBo.setNotifiedAt(new Date());
+        settlementDao.update(updateBo);
+    }
+
+    @Override
+    public int autoConfirm(Date postingTimeFrom, Date postingTimeTo) {
+        SettlementSo so = new SettlementSo();
+        so.setGePostingTime(postingTimeFrom);
+        so.setLtPostingTime(postingTimeTo);
+        so.setConfirmState(SettlementConfirmStateEnum.NONE.getCode());
+        List<SettlementBo> settlementBoList = settlementDao.listBoBySo(so);
+
+        int n = 0;
+        for (SettlementBo bo : settlementBoList) {
+            if (bo.getConfirmState().equals(SettlementConfirmStateEnum.NONE.getCode())) {
+                bo.setConfirmAt(new Date());
+                bo.setConfirmState(SettlementConfirmStateEnum.AUTO_CONFIRMED.getCode());
+                settlementDao.update(bo);
+
+                if (!bo.getPayState().equals(SettlementPayStateEnum.PAID.getCode())) {
+                    SettlementNotifyRequest notifyRequest = new SettlementNotifyRequest();
+                    notifyRequest.setId(bo.getId());
+                    notifyRequest.setNotifyType(SettlementNotifyTypeEnum.CONFIRMED.getCode());
+                    queueHelper.publish(notifyRequest);
+                }
+
+                n++;
+            }
+        }
+        return n;
+    }
+
+    public Date getAccountingTime(CompanySettlementConfigBo configBo, OrderBo orderBo, List<ShipmentOrderPackageBo> shipmentOrderPackageBos) {
+        String orderNo = orderBo.getExternalOrderNo();
+        log.info(orderNo + "结算配置信息:" + JsonUtils.toJson(configBo));
+
+        if (configBo.getSettlementMode().equals(SettlementModeEnum.MANUAL.getCode())) {
+            return null;
+        }
+
+        if (orderBo.getInStoreTime() == null) {
+            log.info(orderNo + "入库时间为空");
+            return null;
+        }
+
+        Date begion = DateUtil.parseDate(settlementBeginDate);
+        if (orderBo.getInStoreTime().compareTo(begion) < 0) {
+            log.info(orderNo + "入库时间" + orderBo.getInStoreTime() + "小于" + settlementBeginDate);
+            return null;
+        }
+
+        if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+            if (configBo.getFclType().equals(CompanySettlementFCLTypeEnum.EnRoute.getCode())) {
+                if (ShipmentOrderStateEnum.getEnumByCode(orderBo.getState()).getOrder() >= ShipmentOrderStateEnum.EnRoute.getOrder()) {
+                    return orderBo.getEnRouteAt();
+                }
+            } else if (configBo.getFclType().equals(CompanySettlementFCLTypeEnum.Departed.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Departed.getOrder()
+                )) {
+                    Optional<ShipmentOrderPackageBo> optional = shipmentOrderPackageBos.stream()
+                            .filter(d -> d.getDepartedAt() != null)
+                            .max(Comparator.comparing(ShipmentOrderPackageBo::getDepartedAt));
+                    if (optional.isPresent()) {
+                        return optional.get().getDepartedAt();
+                    }
+                }
+            }
+        } else {
+            if (configBo.getLclType().equals(CompanySettlementLCLTypeEnum.Received.getCode())) {
+                if (orderBo.getAllArrived().equals(OrderAllArrivedEnum.ALL_ARRIVED.getCode())) {
+                    return orderBo.getInStoreTime();
+                }
+            } else if (configBo.getLclType().equals(CompanySettlementLCLTypeEnum.Departed.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Departed.getOrder()
+                )) {
+                    Optional<ShipmentOrderPackageBo> optional = shipmentOrderPackageBos.stream()
+                            .filter(d -> d.getDepartedAt() != null)
+                            .max(Comparator.comparing(ShipmentOrderPackageBo::getDepartedAt));
+                    if (optional.isPresent()) {
+                        return optional.get().getDepartedAt();
+                    }
+                }
+            } else if (configBo.getLclType().equals(CompanySettlementLCLTypeEnum.Signed.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Signed.getOrder()
+                )){
+                    return orderBo.getSignedAt();
+                }
+            } else if (configBo.getLclType().equals(CompanySettlementLCLTypeEnum.Shipped.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Shipped.getOrder()
+                )){
+                    return orderBo.getShippedAt();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void accountingOrder(OrderBo orderBo, List<ShipmentOrderPackageBo> shipmentOrderPackageBos, CompanySettlementConfigBo configBo) {
+        if (configBo.getSettlementMode().equals(SettlementModeEnum.MANUAL.getCode())) {
+            return;
+        }
+
+        if (orderBo.getSettlementState().equals(OrderSettlementStateEnum.NONE.getCode())) {
+            Date accountingTime = getAccountingTime(configBo, orderBo, shipmentOrderPackageBos);
+            orderBo.setAccountingTime(accountingTime);
+            orderDao.updateAll(orderBo);
+        }
+    }
+
+    private void updateDeadline(OrderBo orderBo, List<ShipmentOrderPackageBo> shipmentOrderPackageBos, CompanySettlementConfigBo configBo) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+            return;
+        }
+
+        if (!orderBo.getSettlementState().equals(OrderSettlementStateEnum.SETTLEMENTED.getCode())) {
+            return;
+        }
+
+        Date now = new Date();
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderId(orderBo.getShipmentOrderId());
+        billSo.setSettlementIdIsNull(false);
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return;
+        }
+        List<SettlementBo> settlementBos = settlementDao.listBoByIdList(
+                billBos.stream()
+                        .map(BillBo::getSettlementId)
+                        .collect(Collectors.toList())
+        );
+
+        if (settlementBos.isEmpty()) {
+            return;
+        }
+
+        SettlementBo settlementBo = settlementBos.get(0);
+        Date deadline = getDeadline(configBo, orderBo, shipmentOrderPackageBos, settlementBo, now);
+        if (deadline != null) {
+            if (settlementBo.getDeadline() == null) {
+                ////需要账单下所有运单都有截止时间，才有截止时间
+                deadline = getSettlementDeadline(settlementBo, configBo, now);
+                if (deadline != null) {
+                    settlementBo.setDeadline(deadline);
+                    settlementDao.update(settlementBo);
+
+                    SettlementNotifyRequest notifyRequest = new SettlementNotifyRequest();
+                    notifyRequest.setId(settlementBo.getId());
+                    notifyRequest.setNotifyType(SettlementNotifyTypeEnum.UNPAYNOTIFY.getCode());
+                    queueHelper.publish(notifyRequest);
+                }
+            } else {
+                if (settlementBo.getDeadline().before(deadline)) {
+                    settlementBo.setDeadline(deadline);
+                    settlementDao.update(settlementBo);
+                }
+            }
+        }
+    }
+
+    private Date getSettlementDeadline(SettlementBo settlementBo, CompanySettlementConfigBo configBo, Date now) {
+        BillSo billSo = new BillSo();
+        billSo.setSettlementId(settlementBo.getId());
+        List<BillBo> bills = billDao.getListBySo(billSo);
+        List<String> shipmentOrderIds = bills.stream()
+                .map(BillBo::getShipmentOrderId)
+                .collect(Collectors.toList());
+
+        List<OrderBo> orderBosList = orderDao.getByShipmentOrderIds(shipmentOrderIds);
+        ShipmentOrderPackageSo packageSo = new ShipmentOrderPackageSo();
+        packageSo.setShipmentOrderIds(orderBosList.stream()
+                .map(OrderBo::getShipmentOrderId)
+                .collect(Collectors.toList())
+        );
+        List<ShipmentOrderPackageBo> orderPackageBos = shipmentOrderPackageDao.getListBySo(packageSo);
+
+        List<Date> deadlines = new ArrayList<>();
+        for (OrderBo order : orderBosList) {
+            List<ShipmentOrderPackageBo> packageBos = orderPackageBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(order.getShipmentOrderId()))
+                    .collect(Collectors.toList());
+            Date d = getDeadline(configBo, order, packageBos,settlementBo, now);
+            deadlines.add(d);
+        }
+        Date deadline = null;
+        if (deadlines.stream().allMatch(Objects::nonNull)) {
+            Optional<Date> optionalDate = deadlines.stream().max(Comparator.comparing(d -> d));
+            if (optionalDate.isPresent()) {
+                deadline = optionalDate.get();
+            }
+        }
+
+        return deadline;
+    }
+
+    /**
+     * 票结每票出账
+     *
+     * @param orderBo
+     * @param configBo
+     * @return
+     */
+    private void settlementOrder(OrderBo orderBo, List<ShipmentOrderPackageBo> shipmentOrderPackageBos, CompanySettlementConfigBo configBo) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+            return;
+        }
+
+        if (!configBo.getPeriod().equals(CompanySettlementPeriodEnum.ORDER.getCode())) {
+            return;
+        }
+
+        if (orderBo.getAccountingTime() == null) {
+            return;
+        }
+
+        String shipmentOrderId = orderBo.getShipmentOrderId();
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderId(shipmentOrderId);
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return;
+        }
+
+        SettlementSo settlementSo = new SettlementSo();
+        settlementSo.setShipmentOrderId(orderBo.getShipmentOrderId());
+        settlementSo.setMode(SettlementModeEnum.ORDER.getCode());
+        SettlementBo settlementBo = settlementDao.findBoBySo(settlementSo);
+
+        List<BillBo> settlementBillBos = billBos.stream()
+                .filter(d -> d.getSettlementId() == null)
+                .collect(Collectors.toList());
+        Date now = new Date();
+        Date deadline = getDeadline(configBo, orderBo, shipmentOrderPackageBos, settlementBo, now);
+        if (settlementBo != null) {
+            if(!settlementBillBos.isEmpty()) {
+                if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+                    if (configBo.getFclDeadlineType().equals(CompanySettlementFCLDeadlineTypeEnum.Settlement.getCode())) {
+                        deadline = now;
+                    }
+                } else {
+                    if (configBo.getLclDeadlineType().equals(CompanySettlementLCLDeadlineTypeEnum.Settlement.getCode())) {
+                        deadline = now;
+                    }
+                }
+            }
+            update(settlementBillBos, settlementBo, now, deadline);
+        } else {
+            if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+                create(settlementBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.FCL, now, deadline, orderBo.getShipmentOrderId(), "");
+            } else {
+                create(settlementBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.NONE, now, deadline, orderBo.getShipmentOrderId(), "");
+            }
+        }
+
+        orderBo.setSettlementState(OrderSettlementStateEnum.SETTLEMENTED.getCode());
+        orderDao.update(orderBo);
+    }
+
+    private void updateSettlementContainer(OrderBo orderBo, List<ShipmentOrderPackageBo> shipmentOrderPackageBos, CompanySettlementConfigBo configBo) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+            return;
+        }
+        if (!configBo.getPeriod().equals(CompanySettlementPeriodEnum.CONTAINER.getCode())) {
+            return;
+        }
+        if (orderBo.getAccountingTime() == null) {
+            return;
+        }
+        if (orderBo.getSettlementState().equals(OrderSettlementStateEnum.NONE.getCode())) {
+            return;
+        }
+
+        String shipmentOrderId = orderBo.getShipmentOrderId();
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderId(shipmentOrderId);
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return;
+        }
+        if (billBos.stream().allMatch(d -> d.getSettlementId() != null)) {
+            return;
+        }
+
+        List<Long> settlementIds = billBos.stream()
+                .filter(d -> d.getSettlementId() != null)
+                .map(BillBo::getSettlementId)
+                .distinct()
+                .collect(Collectors.toList());
+        if (settlementIds.isEmpty()) {
+            return;
+        }
+        List<SettlementBo> settlementBos = settlementDao.listBoByIdList(settlementIds);
+        if (settlementBos.isEmpty()) {
+            return;
+        }
+
+        Optional<String> optionalRegisterNo = settlementBos.stream()
+                .filter(d -> StringUtils.hasText(d.getRegisterNo()))
+                .map(SettlementBo::getRegisterNo)
+                .findFirst();
+        if (!optionalRegisterNo.isPresent()) {
+            return;
+        }
+        String registerNo = optionalRegisterNo.get();
+        Optional<SettlementBo> optionalSettlementBo = settlementBos.stream()
+                .filter(d -> d.getConfirmState().equals(SettlementConfirmStateEnum.NONE.getCode()))
+                .sorted(Comparator.comparing(SettlementBo::getPostingTime, Comparator.reverseOrder()))
+                .findFirst();
+
+        List<BillBo> settlementBillBos = billBos.stream()
+                .filter(d -> d.getSettlementId() == null)
+                .collect(Collectors.toList());
+
+        Date now = new Date();
+        if (optionalSettlementBo.isPresent()) {
+            SettlementBo settlementBo = optionalSettlementBo.get();
+            update(settlementBillBos, settlementBo, now, settlementBo.getDeadline());
+        } else {
+            Date deadline = getDeadline(configBo, orderBo, shipmentOrderPackageBos,null, now);
+            if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+                create(settlementBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.FCL, now, deadline,"", registerNo);
+            } else {
+                create(settlementBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.NONE, now, deadline,"", registerNo);
+            }
+        }
+    }
+
+    /**
+     * 更新月结账单
+     *
+     * @param orderBo
+     * @param configBo
+     */
+    private void updateSettlementMonth(OrderBo orderBo, CompanySettlementConfigBo configBo) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.MONTH.getCode())) {
+            return;
+        }
+
+        if (orderBo.getAccountingTime() == null) {
+            return;
+        }
+
+        String shipmentOrderId = orderBo.getShipmentOrderId();
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderId(shipmentOrderId);
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return;
+        }
+
+        if (billBos.stream().allMatch(d -> d.getSettlementId() != null)) {
+            return;
+        }
+
+        List<Long> settlementIds = billBos.stream()
+                .filter(d -> d.getSettlementId() != null)
+                .map(BillBo::getSettlementId)
+                .distinct()
+                .collect(Collectors.toList());
+        if (settlementIds.isEmpty()) {
+            return;
+        }
+
+        List<SettlementBo> settlementBos = settlementDao.listBoByIdList(settlementIds);
+
+        if (settlementBos.isEmpty()) {
+            return;
+        }
+
+        SettlementBo settlementBo = settlementBos.get(0);
+        if (!settlementBo.getConfirmState().equals(SettlementConfirmStateEnum.NONE.getCode())) {
+            return;
+        }
+
+        List<BillBo> settlementBillBos = billBos.stream()
+                .filter(d -> d.getSettlementId() == null)
+                .collect(Collectors.toList());
+        Date now = new Date();
+        if (settlementBo != null) {
+            update(settlementBillBos, settlementBo, now, settlementBo.getDeadline());
+        }
+    }
+
+    /**
+     * 运单结算
+     *
+     * @param shipmentOrderId
+     * @return
+     */
+    public boolean settlementOrder(String shipmentOrderId) {
+        OrderBo orderBo = orderDao.getByShipmentOrderId(shipmentOrderId);
+        if (orderBo == null) {
+            throw new BusinessException("运单不存在！");
+        }
+
+        CompanySettlementConfigBo configBo = companySettlementConfigDao.getByCompanyId(orderBo.getExternalCustomerId());
+        if (configBo == null) {
+            return false;
+        }
+
+        List<ShipmentOrderPackageBo> shipmentOrderPackageBos = shipmentOrderPackageDao.getByShipmentOrderId(orderBo.getShipmentOrderId());
+
+        accountingOrder(orderBo, shipmentOrderPackageBos, configBo);
+
+        if (configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+            if (configBo.getPeriod().equals(CompanySettlementPeriodEnum.ORDER.getCode())) {
+                settlementOrder(orderBo, shipmentOrderPackageBos, configBo);
+            } else if (configBo.getPeriod().equals(CompanySettlementPeriodEnum.CONTAINER.getCode())) {
+                updateSettlementContainer(orderBo, shipmentOrderPackageBos, configBo);
+                updateDeadline(orderBo, shipmentOrderPackageBos, configBo);
+            } else if (configBo.getPeriod().equals(CompanySettlementPeriodEnum.DAY.getCode())) {
+                updateDeadline(orderBo, shipmentOrderPackageBos, configBo);
+            }
+        } else if (configBo.getSettlementMode().equals(SettlementModeEnum.MONTH.getCode())) {
+            updateSettlementMonth(orderBo, configBo);
+        }
+
+        return true;
+    }
+
+    /**
+     * 货柜结算
+     *
+     * @param registerNo
+     * @return
+     */
+    public boolean settlementContainer(String registerNo) {
+        ContainerRegisterBo containerRegisterBo = containerRegisterDao.getByRegisterNo(registerNo);
+
+        if (containerRegisterBo == null) {
+            throw new BusinessException(String.format("货柜[%s]不存在", registerNo));
+        }
+
+        LoadingReportSo loadingReportSo = new LoadingReportSo();
+        loadingReportSo.setRegisterNo(registerNo);
+        List<LoadingReportBo> loadingReportBoList = loadingReportDao.listBoBySo(loadingReportSo);
+
+        if (loadingReportBoList.isEmpty()) {
+            return false;
+        }
+
+        LoadingReportDetailSo loadingReportDetailSo = new LoadingReportDetailSo();
+        loadingReportDetailSo.setLoadingReportNos(loadingReportBoList.stream()
+                .map(LoadingReportBo::getLoadingReportNo)
+                .collect(Collectors.toList())
+        );
+        List<LoadingReportDetailBo> loadingReportDetailBoList = loadingReportDetailDao.listBoBySo(loadingReportDetailSo);
+        if (loadingReportDetailBoList.isEmpty()) {
+            return false;
+        }
+
+        OrderSo orderSo = new OrderSo();
+        orderSo.setOrderNos(loadingReportDetailBoList.stream()
+                .map(LoadingReportDetailBo::getOrderNo)
+                .distinct()
+                .collect(Collectors.toList())
+        );
+        List<OrderBo> orderBos = orderDao.listBoBySo(orderSo);
+        if (orderBos.isEmpty()) {
+            return false;
+        }
+
+        ShipmentOrderPackageSo packageSo = new ShipmentOrderPackageSo();
+        packageSo.setShipmentOrderIds(orderBos.stream()
+                .map(OrderBo::getShipmentOrderId)
+                .collect(Collectors.toList())
+        );
+        List<ShipmentOrderPackageBo> shipmentOrderPackageBos = shipmentOrderPackageDao.getListBySo(packageSo);
+
+        CompanySettlementConfigSo configSo = new CompanySettlementConfigSo();
+        configSo.setInCompanyIdList(orderBos.stream()
+                .map(OrderBo::getExternalCustomerId)
+                .distinct()
+                .collect(Collectors.toList())
+        );
+
+        List<CompanySettlementConfigBo> configs = companySettlementConfigDao.listBoBySo(configSo);
+        for (OrderBo order : orderBos) {
+            Optional<CompanySettlementConfigBo> optionalConfigBo = configs.stream()
+                    .filter(d -> d.getCompanyId().equals(order.getExternalCustomerId()))
+                    .findFirst();
+            if (!optionalConfigBo.isPresent()) {
+                continue;
+            }
+            List<ShipmentOrderPackageBo> packageBos = shipmentOrderPackageBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(order.getShipmentOrderId()))
+                    .collect(Collectors.toList());
+            accountingOrder(order, packageBos, optionalConfigBo.get());
+        }
+
+        Map<String, List<OrderBo>> groups = orderBos.stream().collect(Collectors.groupingBy(OrderBo::getExternalCustomerId));
+        for (String companyId : groups.keySet()) {
+            List<OrderBo> orderBoList = groups.get(companyId);
+
+            Optional<CompanySettlementConfigBo> optionalConfigBo = configs.stream()
+                    .filter(d -> d.getCompanyId().equals(companyId))
+                    .findFirst();
+
+            if (!optionalConfigBo.isPresent()) {
+                continue;
+            }
+            CompanySettlementConfigBo configBo = optionalConfigBo.get();
+
+            if (configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+                if (configBo.getPeriod().equals(CompanySettlementPeriodEnum.ORDER.getCode())) {
+                    for (OrderBo orderBo : orderBoList) {
+                        settlementOrder(orderBo, shipmentOrderPackageBos, configBo);
+                    }
+                } else if (configBo.getPeriod().equals(CompanySettlementPeriodEnum.CONTAINER.getCode())) {
+                    List<String> shipmentOrderIds = orderBoList.stream()
+                            .map(OrderBo::getShipmentOrderId)
+                            .collect(Collectors.toList());
+                    List<ShipmentOrderPackageBo> packageBos = shipmentOrderPackageBos.stream()
+                            .filter(d -> shipmentOrderIds.contains(d.getShipmentOrderId()))
+                            .collect(Collectors.toList());
+                    settlementContainer(containerRegisterBo, orderBoList, packageBos, configBo);
+                    for (OrderBo orderBo : orderBoList) {
+                        updateDeadline(orderBo, shipmentOrderPackageBos, configBo);
+                    }
+                } else if (configBo.getPeriod().equals(CompanySettlementPeriodEnum.DAY.getCode())) {
+                    for (OrderBo orderBo : orderBoList) {
+                        updateDeadline(orderBo, shipmentOrderPackageBos, configBo);
+                    }
+                }
+            } else if (configBo.getSettlementMode().equals(SettlementModeEnum.MONTH.getCode())) {
+                for (OrderBo orderBo : orderBoList) {
+                    updateSettlementMonth(orderBo, configBo);
+                }
+            }
+        }
+        return true;
+    }
+
+    private void settlementContainer(ContainerRegisterBo containerRegisterBo,
+                                     List<OrderBo> orderBos, List<ShipmentOrderPackageBo> shipmentOrderPackageBos,
+                                     CompanySettlementConfigBo configBo) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+            return;
+        }
+        if (!configBo.getPeriod().equals(CompanySettlementPeriodEnum.CONTAINER.getCode())) {
+            return;
+        }
+        if (orderBos.isEmpty()) {
+            return;
+        }
+
+        BillSo billSo = new BillSo();
+        billSo.setShipmentOrderIds(orderBos.stream()
+                .map(OrderBo::getShipmentOrderId)
+                .collect(Collectors.toList())
+        );
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return;
+        }
+
+        SettlementSo settlementSo = new SettlementSo();
+        settlementSo.setCompanyId(configBo.getCompanyId());
+        settlementSo.setRegisterNo(containerRegisterBo.getRegisterNo());
+        settlementSo.setMode(SettlementModeEnum.ORDER.getCode());
+        SettlementBo settlementBo = settlementDao.findBoBySo(settlementSo);
+
+        List<BillBo> settlementBillBos = billBos.stream()
+                .filter(d -> d.getSettlementId() == null)
+                .collect(Collectors.toList());
+        Date now = new Date();
+        List<Date> deadlines = new ArrayList<>();
+        for (OrderBo orderBo : orderBos) {
+            List<ShipmentOrderPackageBo> packageBos = shipmentOrderPackageBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                    .collect(Collectors.toList());
+            Date date = getDeadline(configBo, orderBo, packageBos,settlementBo, now);
+            deadlines.add(date);
+        }
+        Date deadline = null;
+        if (deadlines.stream().allMatch(Objects::nonNull)) {
+            Optional<Date> optionalDate = deadlines.stream().max(Comparator.comparing(d -> d));
+            if (optionalDate.isPresent()) {
+                deadline = optionalDate.get();
+            }
+        }
+        if (settlementBo != null) {
+            update(settlementBillBos, settlementBo, now, deadline);
+        } else {
+            if (containerRegisterBo.getType().equals(ContainerTypeEnum.FCL.getCode())) {
+                create(settlementBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.FCL, now, deadline,"", containerRegisterBo.getRegisterNo());
+            } else {
+                create(settlementBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.NONE, now, deadline,"", containerRegisterBo.getRegisterNo());
+            }
+        }
+
+        for (OrderBo orderBo : orderBos) {
+            orderBo.setSettlementState(OrderSettlementStateEnum.SETTLEMENTED.getCode());
+            orderDao.update(orderBo);
+        }
+    }
+
+    /**
+     * 票结每日出账
+     *
+     * @param configBo
+     * @param date
+     * @return
+     */
+    public boolean settlementDay(CompanySettlementConfigBo configBo, Date date) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.ORDER.getCode())) {
+            return false;
+        }
+
+        if (!configBo.getPeriod().equals(CompanySettlementPeriodEnum.DAY.getCode())) {
+            return false;
+        }
+
+        BillSo billSo = new BillSo();
+        billSo.setCompanyId(configBo.getCompanyId());
+        billSo.setSettlementIdIsNull(true);
+        billSo.setCreateAtFrom(DateUtil.parseDate(settlementBeginDate));
+        billSo.setCreateAtTo(date);
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return false;
+        }
+
+        List<OrderBo> orderBoList = orderDao.getByShipmentOrderIds(billBos.stream()
+                .map(BillBo::getShipmentOrderId)
+                .distinct().collect(Collectors.toList())
+        );
+
+        orderBoList = orderBoList.stream()
+                .filter(d -> d.getAccountingTime() != null)
+                .filter(d -> d.getAccountingTime().before(date))
+                .collect(Collectors.toList());
+
+        List<BillBo> settlementLclBillBos = new ArrayList<>();
+        List<BillBo> settlementFclBillBos = new ArrayList<>();
+        List<OrderBo> lclOrderBoList = new ArrayList<>();
+        List<OrderBo> fclOrderBoList = new ArrayList<>();
+        for (OrderBo orderBo : orderBoList) {
+            List<BillBo> orderBillBos = billBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                    .collect(Collectors.toList());
+            if (!orderBillBos.isEmpty()) {
+                if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+                    fclOrderBoList.add(orderBo);
+                    settlementFclBillBos.addAll(orderBillBos);
+                } else {
+                    lclOrderBoList.add(orderBo);
+                    settlementLclBillBos.addAll(orderBillBos);
+                }
+
+                if (orderBo.getSettlementState().equals(OrderSettlementStateEnum.NONE.getCode())) {
+                    orderBo.setSettlementState(OrderSettlementStateEnum.SETTLEMENTED.getCode());
+                    orderDao.update(orderBo);
+                }
+            }
+        }
+
+        if (settlementLclBillBos.isEmpty() && settlementFclBillBos.isEmpty()) {
+            return false;
+        }
+
+        Date now = new Date();
+
+        if (!settlementLclBillBos.isEmpty()) {
+            ShipmentOrderPackageSo packageSo = new ShipmentOrderPackageSo();
+            packageSo.setShipmentOrderIds(lclOrderBoList.stream()
+                    .map(OrderBo::getShipmentOrderId)
+                    .collect(Collectors.toList())
+            );
+            List<ShipmentOrderPackageBo> shipmentOrderPackageBos = shipmentOrderPackageDao.getListBySo(packageSo);
+            List<Date> deadlines = new ArrayList<>();
+            for (OrderBo orderBo : lclOrderBoList) {
+                List<ShipmentOrderPackageBo> packageBos = shipmentOrderPackageBos.stream()
+                        .filter(d -> d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                        .collect(Collectors.toList());
+                Date d = getDeadline(configBo, orderBo, packageBos,null, now);
+                deadlines.add(d);
+            }
+            Date deadline = null;
+            if (deadlines.stream().allMatch(Objects::nonNull)) {
+                Optional<Date> optionalDate = deadlines.stream().max(Comparator.comparing(d -> d));
+                if (optionalDate.isPresent()) {
+                    deadline = optionalDate.get();
+                }
+            }
+            create(settlementLclBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.NONE, now, deadline,"", "");
+        }
+
+        if (!settlementFclBillBos.isEmpty()) {
+            ShipmentOrderPackageSo packageSo = new ShipmentOrderPackageSo();
+            packageSo.setShipmentOrderIds(fclOrderBoList.stream()
+                    .map(OrderBo::getShipmentOrderId)
+                    .collect(Collectors.toList())
+            );
+            List<ShipmentOrderPackageBo> shipmentOrderPackageBos = shipmentOrderPackageDao.getListBySo(packageSo);
+            List<Date> deadlines = new ArrayList<>();
+            for (OrderBo orderBo : fclOrderBoList) {
+                List<ShipmentOrderPackageBo> packageBos = shipmentOrderPackageBos.stream()
+                        .filter(d -> d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                        .collect(Collectors.toList());
+                Date d = getDeadline(configBo, orderBo, packageBos,null, now);
+                deadlines.add(d);
+            }
+            Date deadline = null;
+            if (deadlines.stream().allMatch(Objects::nonNull)) {
+                Optional<Date> optionalDate = deadlines.stream().max(Comparator.comparing(d -> d));
+                if (optionalDate.isPresent()) {
+                    deadline = optionalDate.get();
+                }
+            }
+            create(settlementFclBillBos, SettlementModeEnum.ORDER, SettlementTypeEnum.FCL, now, deadline, "","");
+        }
+        return true;
+    }
+
+    /**
+     * 月结
+     *
+     * @param configBo
+     * @param fromData
+     * @param toDate
+     * @return
+     */
+    @Override
+    public boolean settlementMonth(CompanySettlementConfigBo configBo, Date fromData, Date toDate) {
+        if (!configBo.getSettlementMode().equals(SettlementModeEnum.MONTH.getCode())) {
+            return false;
+        }
+
+        OrderSo orderSo = new OrderSo();
+        orderSo.setGeAccountingTime(fromData);
+        orderSo.setLtAccountingTime(toDate);
+        orderSo.setExternalCustomerId(configBo.getCompanyId());
+        List<OrderBo> orderBoList = orderDao.listBoBySo(orderSo);
+        if (orderBoList.isEmpty()) {
+            return false;
+        }
+
+        BillSo billSo = new BillSo();
+        billSo.setCompanyId(configBo.getCompanyId());
+        billSo.setSettlementIdIsNull(true);
+        billSo.setShipmentOrderIds(orderBoList.stream()
+                .map(OrderBo::getShipmentOrderId)
+                .collect(Collectors.toList())
+        );
+        List<BillBo> billBos = billDao.getListBySo(billSo);
+        if (billBos.isEmpty()) {
+            return false;
+        }
+
+        List<BillBo> settlementLclBillBos = new ArrayList<>();
+        List<BillBo> settlementFclBillBos = new ArrayList<>();
+        for (OrderBo orderBo : orderBoList) {
+            List<BillBo> orderBillBos = billBos.stream()
+                    .filter(d -> d.getShipmentOrderId().equals(orderBo.getShipmentOrderId()))
+                    .collect(Collectors.toList());
+            if (!orderBillBos.isEmpty()) {
+                if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+                    settlementFclBillBos.addAll(orderBillBos);
+                } else {
+                    settlementLclBillBos.addAll(orderBillBos);
+                }
+                if (orderBo.getSettlementState().equals(OrderSettlementStateEnum.NONE.getCode())) {
+                    orderBo.setSettlementState(OrderSettlementStateEnum.SETTLEMENTED.getCode());
+                    orderDao.update(orderBo);
+                }
+            }
+        }
+
+        if (settlementLclBillBos.isEmpty() && settlementFclBillBos.isEmpty()) {
+            return false;
+        }
+
+        Date now = new Date();
+        Date deadline = DateUtil.addDay(now, configBo.getLclDeadlineDays());
+
+        if (!settlementLclBillBos.isEmpty()) {
+            create(settlementLclBillBos, SettlementModeEnum.MONTH, SettlementTypeEnum.NONE, now, deadline, "","");
+        }
+        if (!settlementFclBillBos.isEmpty()) {
+            create(settlementFclBillBos, SettlementModeEnum.MONTH, SettlementTypeEnum.FCL, now, deadline, "","");
+        }
+        return true;
+    }
+
+    private Date getDeadline(CompanySettlementConfigBo configBo, OrderBo orderBo, List<ShipmentOrderPackageBo> shipmentOrderPackageBos, SettlementBo settlementBo,Date now) {
+        Date deadline = null;
+
+        if (orderBo.getOrderType().equals(ShipmentOrderTypeEnum.FULL_CONTAINER_LOAD.getCode())) {
+            if (configBo.getFclDeadlineType().equals(CompanySettlementFCLDeadlineTypeEnum.Settlement.getCode())) {
+                if (settlementBo != null && settlementBo.getDeadline() != null) {
+                    deadline = settlementBo.getDeadline();
+                } else {
+                    deadline = now;
+                }
+            } else if (configBo.getFclDeadlineType().equals(CompanySettlementFCLDeadlineTypeEnum.Arrived.getCode())) {
+                if (orderBo.getArrivedAt() != null) {
+                    deadline = DateUtil.addDay(orderBo.getArrivedAt(), configBo.getFclDeadlineDays());
+                }
+            }
+        } else {
+            if (configBo.getLclDeadlineType().equals(CompanySettlementLCLDeadlineTypeEnum.Settlement.getCode())) {
+                if (settlementBo != null && settlementBo.getDeadline() != null) {
+                    deadline = settlementBo.getDeadline();
+                } else {
+                    deadline = DateUtil.addDay(now, configBo.getLclDeadlineDays());
+                }
+            } else if (configBo.getLclDeadlineType().equals(CompanySettlementLCLDeadlineTypeEnum.Received.getCode())) {
+                if (orderBo.getAllArrived().equals(OrderAllArrivedEnum.ALL_ARRIVED.getCode())) {
+                    if (orderBo.getInStoreTime() != null) {
+                        deadline = DateUtil.addDay(orderBo.getInStoreTime(), configBo.getLclDeadlineDays());
+                    }
+                }
+            } else if (configBo.getLclDeadlineType().equals(CompanySettlementLCLDeadlineTypeEnum.Departed.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Departed.getOrder()
+                )) {
+                    Optional<Date> departedAt = shipmentOrderPackageBos.stream()
+                            .map(ShipmentOrderPackageBo::getDepartedAt)
+                            .filter(at -> at != null)
+                            .max(Date::compareTo);
+                    if (departedAt.isPresent()) {
+                        deadline = DateUtil.addDay(departedAt.get(), configBo.getLclDeadlineDays());
+                    }
+                }
+            } else if (configBo.getLclDeadlineType().equals(CompanySettlementLCLDeadlineTypeEnum.Arrived.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Arrived.getOrder()
+                )) {
+                    if (orderBo.getArrivedAt() != null) {
+                        deadline = DateUtil.addDay(orderBo.getArrivedAt(), configBo.getLclDeadlineDays());
+                    }
+                }
+            } else if (configBo.getLclDeadlineType().equals(CompanySettlementLCLDeadlineTypeEnum.Signed.getCode())) {
+                if (shipmentOrderPackageBos.stream().allMatch(d ->
+                        ShipmentOrderPackageStateEnum.getEnumByCode(d.getState()).getOrder() >= ShipmentOrderPackageStateEnum.Signed.getOrder()
+                )) {
+                    if (orderBo.getSignedAt() != null) {
+                        deadline = DateUtil.addDay(orderBo.getSignedAt(), configBo.getLclDeadlineDays());
+                    }
+                }
+            }
+        }
+        return deadline;
+    }
+
+    public List<CompanySettlementVo> getUnPaidNotifyCompany(List<String> companyIds) {
+        List<Integer> payStates = Arrays.asList(
+                SettlementPayStateEnum.READY.getCode(),
+                SettlementPayStateEnum.PARTIAL.getCode()
+        );
+        return settlementDao.getUnPaidNotifyCompany(payStates, companyIds);
+    }
+}

@@ -266,9 +266,9 @@ class CaseRunner:
         return rerun_base_job, rerun_base_build_number
 
     @staticmethod
-    def _get_jenkins_report(rerun_base_job, rerun_base_build_number):
+    def _get_jenkins_report(rerun_base_job, rerun_base_build_number, data_test):
         result = JenkinsProvider.server.get_build_test_report(rerun_base_job, rerun_base_build_number)
-        return result
+        return result, data_test
 
     def _get_failed_cases(self, rerun_base_job, rerun_base_build_number):
         """

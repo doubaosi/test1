@@ -22,10 +22,6 @@ import jenkins
 import json
 import zipfile
 
-test=wentidaima
-
-weishenm you meiyoul 
-
 FIXED_REQS = "pytest==6.2.4 allure-pytest==2.8.6"
 DYNA_REQS = "sdet_detection==0.4.9 increment==0.3.11.8 " \
             "pytest-sdet-case==0.6.10 pytest-sdet-xdist==1.5.0 pytest-sdet-sync==0.4.5"
@@ -270,9 +266,9 @@ class CaseRunner:
         return rerun_base_job, rerun_base_build_number
 
     @staticmethod
-    def _get_jenkins_report(rerun_base_job, rerun_base_build_number):
+    def _get_jenkins_report(rerun_base_job, rerun_base_build_number, data_test):
         result = JenkinsProvider.server.get_build_test_report(rerun_base_job, rerun_base_build_number)
-        return result
+        return result, data_test
 
     def _get_failed_cases(self, rerun_base_job, rerun_base_build_number):
         """
